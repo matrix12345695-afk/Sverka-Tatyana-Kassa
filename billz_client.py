@@ -74,10 +74,12 @@ class BillzClient:
         if not self.secret_token:
             token = self.current_access_token()
             if not token:
-                raise BillzError("Нет токена Billz. Отправьте боту /billz_token <токен> (как получить — в README).")
+                raise BillzError("Нет токена Billz. Добавьте его в секрет BILLZ_ACCESS_TOKEN "
+                                 "(или командой /billz_token, если бот запущен постоянно). Как получить — в README.")
             exp = token_expiry(token)
             if exp and exp < datetime.now(timezone.utc):
-                raise BillzError(f"Токен Billz истёк {exp:%d.%m.%Y}. Отправьте новый: /billz_token <токен>")
+                raise BillzError(f"Токен Billz истёк {exp:%d.%m.%Y}. Обновите секрет BILLZ_ACCESS_TOKEN "
+                                 "(или /billz_token <токен>).")
             return token
         r = self.session.post(
             f"{self.api_url}/v1/auth/login",
@@ -116,8 +118,8 @@ class BillzClient:
                 time.sleep(2 * (attempt + 1))
                 continue
             if r.status_code in (401, 403):
-                raise BillzError("Billz не принял токен (истёк или выход из аккаунта). "
-                                 "Отправьте новый: /billz_token <токен>")
+                raise BillzError("Billz не принял токен (истёк или был выход из аккаунта). "
+                                 "Обновите секрет BILLZ_ACCESS_TOKEN (или /billz_token <токен>).")
             if r.status_code != 200:
                 raise BillzError(f"Billz {path}: {r.status_code} {r.text[:200]}")
             return r.json()
