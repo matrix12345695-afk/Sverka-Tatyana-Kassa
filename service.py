@@ -29,7 +29,9 @@ class Service:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.billz = BillzClient(settings.billz_api_url, settings.billz_secret_token, settings.billz_company_id,
-                                 access_token=settings.billz_access_token)
+                                 access_token=settings.billz_access_token,
+                                 phone=settings.billz_phone, password=settings.billz_password,
+                                 login_url=settings.billz_login_url, platform_id=settings.billz_platform_id)
         self.sheets = SheetsClient(settings.spreadsheet_id, settings.google_service_account_file)
 
     def resolve_tab(self, y: int, m: int) -> tuple[str, str]:
