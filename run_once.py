@@ -49,7 +49,8 @@ def send(parts: list[str]) -> None:
 
 
 def token_warning() -> str:
-    if settings.billz_secret_token:
+    # при ключе API или автовходе по паролю напоминать про токен не нужно
+    if settings.billz_secret_token or (settings.billz_phone and settings.billz_password):
         return ""
     token = settings.billz_access_token
     if not token:
