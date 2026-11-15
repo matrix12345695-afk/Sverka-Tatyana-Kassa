@@ -1,0 +1,76 @@
+name: Сверка кассы
+
+on:
+  schedule:
+    # 15:55 UTC = 20:55 Ташкент. GitHub часто запускает с опозданием на 5–15 минут,
+    # поэтому ставим чуть раньше 21:00.
+    - cron: "55 15 * * *"
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "Какой отчёт"
+        type: choice
+        default: daily
+        options: [auto, daily, month, period, spot]
+      day:
+        description: "Для daily: дата ДД.ММ.ГГГГ (пусто = сегодня)"
+        required: false
+      month:
+        description: "Для month: ММ.ГГГГ (пусто = прошлый месяц)"
+        required: false
+      start:
+        description: "Для period: начало ДД.ММ.ГГГГ"
+        required: false
+      end:
+        description: "Для period: конец ДД.ММ.ГГГГ"
+        required: false
+
+concurrency:
+  group: sverka
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Установить зависимости
+        run: pip install "requests>=2.31" "google-auth>=2.29" "tzdata>=2024.1"
+
+      - name: Подготовить файлы настроек из секретов
+        env:
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$CONFIG_JSON" ]; then printf '%s' "$CONFIG_JSON" > config.json; fi
+          if [ -n "$GOOGLE_SERVICE_ACCOUNT_JSON" ]; then printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > service_account.json; fi
+
+      - name: Сверка и отправка в Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ALLOWED_CHAT_IDS: ${{ secrets.ALLOWED_CHAT_IDS }}
+          BILLZ_ACCESS_TOKEN: ${{ secrets.BILLZ_ACCESS_TOKEN }}
+          BILLZ_SECRET_TOKEN: ${{ secrets.BILLZ_SECRET_TOKEN }}
+          BILLZ_COMPANY_ID: ${{ secrets.BILLZ_COMPANY_ID }}
+          BILLZ_SUBDOMAIN: ${{ secrets.BILLZ_SUBDOMAIN }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_FILE: service_account.json
+          TIMEZONE: Asia/Tashkent
+          IN_KIND: ${{ github.event.inputs.kind }}
+          IN_DAY: ${{ github.event.inputs.day }}
+          IN_MONTH: ${{ github.event.inputs.month }}
+          IN_START: ${{ github.event.inputs.start }}
+          IN_END: ${{ github.event.inputs.end }}
+        run: |
+          args=(--kind "${IN_KIND:-auto}")
+          [ -n "$IN_DAY" ] && args+=(--day "$IN_DAY")
+          [ -n "$IN_MONTH" ] && args+=(--month "$IN_MONTH")
+          [ -n "$IN_START" ] && args+=(--start "$IN_START")
+          [ -n "$IN_END" ] && args+=(--end "$IN_END")
+          python run_once.py "${args[@]}"
