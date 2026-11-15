@@ -1,16 +1,17 @@
 """Загрузка чеков из Billz.
 
-Два способа входа:
-  1) токен входа Billz (access_token из браузера) — живёт ~14 дней,
-     хранится в файле billz_token.txt, обновляется командой /billz_token;
-  2) секретный ключ API (BILLZ_SECRET_TOKEN), если когда-нибудь появится.
+Способы входа (по приоритету):
+  1) секретный ключ API (BILLZ_SECRET_TOKEN), если когда-нибудь появится;
+  2) токен входа (BILLZ_ACCESS_TOKEN или файл billz_token.txt), пока он действует;
+  3) телефон + пароль (BILLZ_PHONE, BILLZ_PASSWORD) — автоматический вход,
+     когда токена нет или он истёк. Тогда обновлять токен вручную не нужно.
 """
 from __future__ import annotations
 
 import base64
 import json
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -55,32 +56,74 @@ def load_access_token() -> str:
 class BillzClient:
     PAGE_LIMIT = 100
 
+    DEFAULT_PLATFORM_ID = "7d4a4c38-dd84-4902-b744-0488b80a4c01"  # «веб» в Billz
+
     def __init__(self, api_url: str, secret_token: str, company_id: str, timeout: int = 30,
-                 access_token: str = ""):
+                 access_token: str = "", phone: str = "", password: str = "",
+                 login_url: str = "", platform_id: str = ""):
         self.api_url = api_url
         self.secret_token = secret_token
         self.env_access_token = access_token
+        self.phone = phone
+        self.password = password
+        self.login_url = login_url
+        self.platform_id = platform_id or self.DEFAULT_PLATFORM_ID
         self.company_id = company_id
         self.timeout = timeout
         self._token: str | None = None
         self._token_time = 0.0
+        self._token_rejected = False  # Billz ответил 401 на сохранённый токен
         self.session = requests.Session()
 
     def current_access_token(self) -> str:
         return load_access_token() or self.env_access_token
 
     # --- авторизация ---------------------------------------------------
+    @property
+    def can_password_login(self) -> bool:
+        return bool(self.phone and self.password and self.login_url)
+
+    def _password_login(self) -> str:
+        """Вход по телефону и паролю, как на сайте Billz. Возвращает свежий токен."""
+        digits = "".join(ch for ch in self.phone if ch.isdigit())
+        last_error = ""
+        for phone in dict.fromkeys([digits, "+" + digits]):  # пробуем оба формата номера
+            try:
+                r = self.session.post(
+                    self.login_url,
+                    json={"phone": phone, "password": self.password},
+                    headers={"platform-id": self.platform_id, "Accept": "application/json"},
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as e:
+                last_error = f"нет связи: {e}"
+                continue
+            if r.status_code == 200:
+                token = _find_key(r.json(), "access_token")
+                if token:
+                    return token
+                last_error = "в ответе нет токена"
+            else:
+                # текст ответа не выводим целиком: там может быть что-то личное
+                last_error = f"код {r.status_code}"
+        raise BillzError(f"Автовход в Billz по телефону и паролю не удался ({last_error}). "
+                         "Проверьте секреты BILLZ_PHONE и BILLZ_PASSWORD.")
+
     def _login(self) -> str:
         if not self.secret_token:
             token = self.current_access_token()
+            exp = token_expiry(token) if token else None
+            # токен годится, если Billz его ещё не отклонял и он действует хотя бы час
+            if token and not self._token_rejected and (
+                    not exp or exp - datetime.now(timezone.utc) > timedelta(hours=1)):
+                return token
+            if self.can_password_login:
+                return self._password_login()
             if not token:
-                raise BillzError("Нет токена Billz. Добавьте его в секрет BILLZ_ACCESS_TOKEN "
-                                 "(или командой /billz_token, если бот запущен постоянно). Как получить — в README.")
-            exp = token_expiry(token)
-            if exp and exp < datetime.now(timezone.utc):
-                raise BillzError(f"Токен Billz истёк {exp:%d.%m.%Y}. Обновите секрет BILLZ_ACCESS_TOKEN "
-                                 "(или /billz_token <токен>).")
-            return token
+                raise BillzError("Нет токена Billz. Добавьте секреты BILLZ_PHONE и BILLZ_PASSWORD "
+                                 "(автовход) или токен BILLZ_ACCESS_TOKEN. Как — в README.")
+            raise BillzError(f"Токен Billz истёк {exp:%d.%m.%Y}. Добавьте секреты BILLZ_PHONE и "
+                             "BILLZ_PASSWORD для автовхода или обновите BILLZ_ACCESS_TOKEN.")
         r = self.session.post(
             f"{self.api_url}/v1/auth/login",
             json={"secret_token": self.secret_token},
@@ -113,13 +156,14 @@ class BillzClient:
                 continue
             if r.status_code == 401 and attempt < 2:
                 self._token = None
+                self._token_rejected = True  # следующий вход — по телефону и паролю, если они заданы
                 continue
             if r.status_code >= 500 and attempt < 2:
                 time.sleep(2 * (attempt + 1))
                 continue
             if r.status_code in (401, 403):
-                raise BillzError("Billz не принял токен (истёк или был выход из аккаунта). "
-                                 "Обновите секрет BILLZ_ACCESS_TOKEN (или /billz_token <токен>).")
+                raise BillzError("Billz не принял вход (токен истёк, был выход из аккаунта или неверный пароль). "
+                                 "Проверьте секреты BILLZ_PHONE / BILLZ_PASSWORD или обновите BILLZ_ACCESS_TOKEN.")
             if r.status_code != 200:
                 raise BillzError(f"Billz {path}: {r.status_code} {r.text[:200]}")
             return r.json()
