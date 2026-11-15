@@ -56,6 +56,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           ALLOWED_CHAT_IDS: ${{ secrets.ALLOWED_CHAT_IDS }}
           BILLZ_ACCESS_TOKEN: ${{ secrets.BILLZ_ACCESS_TOKEN }}
+          BILLZ_PHONE: ${{ secrets.BILLZ_PHONE }}
+          BILLZ_PASSWORD: ${{ secrets.BILLZ_PASSWORD }}
           BILLZ_SECRET_TOKEN: ${{ secrets.BILLZ_SECRET_TOKEN }}
           BILLZ_COMPANY_ID: ${{ secrets.BILLZ_COMPANY_ID }}
           BILLZ_SUBDOMAIN: ${{ secrets.BILLZ_SUBDOMAIN }}
