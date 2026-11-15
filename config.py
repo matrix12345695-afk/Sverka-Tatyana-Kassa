@@ -34,6 +34,10 @@ class Settings:
     billz_api_url: str
     billz_company_id: str
     billz_subdomain: str
+    billz_phone: str
+    billz_password: str
+    billz_login_url: str
+    billz_platform_id: str
     spreadsheet_id: str
     google_service_account_file: str
     timezone: str
@@ -50,6 +54,12 @@ def get_settings() -> Settings:
         billz_api_url=os.environ.get("BILLZ_API_URL", "https://api-admin.billz.ai").rstrip("/"),
         billz_company_id=os.environ.get("BILLZ_COMPANY_ID", ""),
         billz_subdomain=os.environ.get("BILLZ_SUBDOMAIN", ""),
+        billz_phone=os.environ.get("BILLZ_PHONE", ""),
+        billz_password=os.environ.get("BILLZ_PASSWORD", ""),
+        billz_login_url=os.environ.get("BILLZ_LOGIN_URL", "") or (
+            f"https://{os.environ['BILLZ_SUBDOMAIN']}.billz.ai/api/v2/auth/web/login"
+            if os.environ.get("BILLZ_SUBDOMAIN") else ""),
+        billz_platform_id=os.environ.get("BILLZ_PLATFORM_ID", ""),
         spreadsheet_id=os.environ.get("SPREADSHEET_ID", ""),
         google_service_account_file=os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json"),
         timezone=os.environ.get("TIMEZONE", "Asia/Tashkent"),
