@@ -86,9 +86,15 @@ class BillzClient:
     def _password_login(self) -> str:
         """Вход по телефону и паролю, как на сайте Billz. Возвращает свежий токен."""
         digits = "".join(ch for ch in self.phone if ch.isdigit())
+        if len(digits) == 9:  # номер ввели без кода страны
+            digits = "998" + digits
         variants = [("998…", digits), ("+998…", "+" + digits)]
         if digits.startswith("998") and len(digits) > 9:
             variants.append(("без 998", digits[3:]))
+        # Billz определяет компанию по сайту, с которого пришёл вход (как в браузере)
+        site = "/".join(self.login_url.split("/")[:3])  # https://<поддомен>.billz.ai
+        headers = {"platform-id": self.platform_id, "Accept": "application/json",
+                   "Origin": site, "Referer": site + "/login"}
         seen, errors = set(), []
         for label, phone in variants:  # пробуем разные форматы номера
             if phone in seen:
@@ -98,7 +104,7 @@ class BillzClient:
                 r = self.session.post(
                     self.login_url,
                     json={"phone": phone, "password": self.password},
-                    headers={"platform-id": self.platform_id, "Accept": "application/json"},
+                    headers=headers,
                     timeout=self.timeout,
                 )
             except requests.RequestException as e:
