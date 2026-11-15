@@ -1,0 +1,31 @@
+{
+  "sheet_tabs": {
+    "2026-10": {"gid": "0", "title": "Касса Октябрь 2026"}
+  },
+  "specialists": {
+    "Имя Фамилия как в Billz": ["как пишут в таблице", "ещё вариант"],
+    "Анна Иванова": ["Анна", "Анна И"],
+    "Анна Петрова": ["Анна П"]
+  },
+  "billz_payment_types": {
+    "Наличные": "cash",
+    "Пер": "transfer",
+    "Перевод": "transfer",
+    "Карта": "card",
+    "QR code единный": "qr",
+    "QR code": "qr",
+    "Payme": "payme"
+  },
+  "sheet_payment_headers": {
+    "налич": "cash",
+    "перев": "transfer",
+    "перечис": "transfer",
+    "карт": "card",
+    "qr": "qr",
+    "payme": "payme",
+    "пейми": "payme"
+  },
+  "partial_payment_min_discount_percent": 30,
+  "partial_payment_products": ["посещ", "СПЛИТ", "курс", "процедур", "дней", "Индивидуально", "Выездной"],
+  "deleted_alert_hours": 1
+}
