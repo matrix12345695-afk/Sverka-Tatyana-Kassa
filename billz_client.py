@@ -86,8 +86,14 @@ class BillzClient:
     def _password_login(self) -> str:
         """Вход по телефону и паролю, как на сайте Billz. Возвращает свежий токен."""
         digits = "".join(ch for ch in self.phone if ch.isdigit())
-        last_error = ""
-        for phone in dict.fromkeys([digits, "+" + digits]):  # пробуем оба формата номера
+        variants = [("998…", digits), ("+998…", "+" + digits)]
+        if digits.startswith("998") and len(digits) > 9:
+            variants.append(("без 998", digits[3:]))
+        seen, errors = set(), []
+        for label, phone in variants:  # пробуем разные форматы номера
+            if phone in seen:
+                continue
+            seen.add(phone)
             try:
                 r = self.session.post(
                     self.login_url,
@@ -96,18 +102,22 @@ class BillzClient:
                     timeout=self.timeout,
                 )
             except requests.RequestException as e:
-                last_error = f"нет связи: {e}"
+                errors.append(f"{label}: нет связи ({type(e).__name__})")
                 continue
             if r.status_code == 200:
                 token = _find_key(r.json(), "access_token")
                 if token:
                     return token
-                last_error = "в ответе нет токена"
-            else:
-                # текст ответа не выводим целиком: там может быть что-то личное
-                last_error = f"код {r.status_code}"
-        raise BillzError(f"Автовход в Billz по телефону и паролю не удался ({last_error}). "
-                         "Проверьте секреты BILLZ_PHONE и BILLZ_PASSWORD.")
+                errors.append(f"{label}: в ответе нет токена")
+                continue
+            # только код и короткое техническое сообщение Billz — без номера и пароля
+            try:
+                reason = str((r.json() or {}).get("error") or "")[:60]
+            except ValueError:
+                reason = "не JSON"
+            errors.append(f"{label}: {r.status_code} {reason}".strip())
+        raise BillzError(f"Автовход в Billz не удался [{'; '.join(errors)}]. "
+                         f"Адрес входа: {self.login_url}. Проверьте BILLZ_PHONE / BILLZ_PASSWORD.")
 
     def _login(self) -> str:
         if not self.secret_token:
@@ -122,8 +132,10 @@ class BillzClient:
             if not token:
                 raise BillzError("Нет токена Billz. Добавьте секреты BILLZ_PHONE и BILLZ_PASSWORD "
                                  "(автовход) или токен BILLZ_ACCESS_TOKEN. Как — в README.")
-            raise BillzError(f"Токен Billz истёк {exp:%d.%m.%Y}. Добавьте секреты BILLZ_PHONE и "
-                             "BILLZ_PASSWORD для автовхода или обновите BILLZ_ACCESS_TOKEN.")
+            why = "Billz отклонил токен (был выход из аккаунта)" if self._token_rejected else \
+                f"Токен Billz истёк {exp:%d.%m.%Y}" if exp else "Токен Billz недействителен"
+            raise BillzError(f"{why}. Добавьте секреты BILLZ_PHONE и BILLZ_PASSWORD для автовхода "
+                             "или обновите BILLZ_ACCESS_TOKEN.")
         r = self.session.post(
             f"{self.api_url}/v1/auth/login",
             json={"secret_token": self.secret_token},
